@@ -1,0 +1,26 @@
+{
+  "provider": "tencent",
+  "secret_id": "",
+  "secret_key": "",
+  "login_token": "",
+  "domain": "example.com",
+  "sub_domain": "@",
+  "check_interval_seconds": 300,
+  "max_interval_seconds": 1800,
+  "heal_after_failures": 1,
+  "auto_renew_adapter": true,
+  "stun_servers": [
+    "stun.qq.com:3478",
+    "stun.miwifi.com:3478",
+    "stun.cloudflare.com:3478"
+  ],
+  "http_sources": [
+    "https://4.ipw.cn",
+    "https://ip.3322.net",
+    "http://members.3322.org/dyndns/getip",
+    "https://api-ipv4.ip.sb/ip",
+    "http://ipv4.icanhazip.com",
+    "https://myip.ipip.net",
+    "https://api.ipify.org"
+  ]
+}

@@ -1,0 +1,18 @@
+# 含密钥与本机状态，禁止入库
+config.json
+state.json
+logs/
+
+# 构建产物
+dist/
+build/
+*.spec
+*.exe
+*.exe.old
+
+# 本地环境
+__pycache__/
+*.pyc
+.venv/
+.workbuddy/
+DDNS-Watchdog-分析报告.md
