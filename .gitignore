@@ -1,6 +1,10 @@
 # 含密钥与本机状态，禁止入库
 config.json
+config.json.lock
+config.invalid.json
 state.json
+runtime.json
+check.now
 logs/
 
 # 构建产物

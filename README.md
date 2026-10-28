@@ -1,125 +1,138 @@
 # DDNS-Watchdog
 
-![Python](https://img.shields.io/badge/python-3.8%2B-blue)
-![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
-![License](https://img.shields.io/badge/license-MIT-green)
-![Dependencies](https://img.shields.io/badge/dependencies-none-success)
+Windows 上的 DDNS 客户端，支持腾讯云 DNSPod。公网 IP 变了就改解析；检测接口全挂、甚至网卡假死时，它会自己换源、退避，并尝试把网络拉回来。
 
-Windows 上的 DDNS（动态域名解析）更新工具，支持 **腾讯云 API 密钥** 与 **DNSPod API 令牌** 两种认证。
+v2 起拆成**两个独立启动器**：终端负责跑监控，图形界面负责改配置。两者可以同时开着，图形界面点保存后终端会自动热更新，不用重启。
 
-公网 IP 变了就改解析；检测接口全挂、甚至整机网络卡死时，它会自己换源、退避，并尝试把网卡重连回来。
+![连接页](docs/screenshot-connection.png)
 
-针对 [ddns-go](https://github.com/jeessy2/ddns-go) 在弱网环境下的两个常见问题做了加固：**HTTP 检测源超时后反复失败**，以及 **网卡卡死后只能手动拔插网线**。
-
----
-
-## 它解决什么
+## 相比 ddns-go 的改进
 
 | 常见问题 | DDNS-Watchdog 的做法 |
 |---|---|
-| HTTP 检测接口超时或解析失败 | 先用 STUN（UDP）直接取公网 IP，不走 HTTP 和 DNS；再备 7 个 HTTP 源，失败自动换源并降权 |
+| HTTP 检测接口超时后一直失败 | 先用 STUN（UDP）直接取公网 IP，不走 HTTP 和 DNS；再备 7 个 HTTP 源，失败自动换源并降权 |
 | 网络抖动时不停重试、刷屏 | 指数退避，失败后逐步拉长间隔，最长 30 分钟 |
-| 网卡卡死，只能拔插网线 | 全部检测源失败后自动 `flushdns`，再执行 `ipconfig /release /renew` |
+| 网卡假死，只能拔插网线 | 全部检测源失败达到阈值后自动 `flushdns`，再执行 `ipconfig /release /renew` |
 | DNS 记录被改成别的地址 | 定期核对云端记录，发现漂移自动改回 |
-| 系统代理把代理出口 IP 写进解析 | 所有检测与 API 请求强制直连，绕过系统代理 |
+| 检测源被污染，写错 IP | 换 IP 时最多采样 3 个源做多数确认；私网/保留段直接丢弃 |
 
-## 特性
+## 两个启动器
 
-- **多源检测**：3 个 STUN 服务器（UDP 3478，不依赖本机 DNS/HTTP）+ 7 个 HTTP 接口，按历史成功率动态排序，坏源自动降权排到队尾
-- **纯 IPv4 源优先**：双栈网络下避免把 IPv6 地址写进 A 记录
-- **交叉确认**：IP 变化时用第二个源复核，降低单源误报
-- **指数退避**：连续失败后逐步拉长检查间隔，避免刷屏式请求
-- **网络自愈**：检测源连续全失败后执行 `flushdns`，可选 `ipconfig /release /renew`
-- **漂移自愈**：云端记录被别人改掉时自动改回
-- **状态缓存**：`state.json` 记录上次写入的 IP，IP 没变不调用修改接口
-- **运行中可配置**：监控时按 `Q` 进入设置菜单，无需重启
-- **零依赖**：纯 Python 标准库实现，可打包成单个 exe
+| 启动器 | 做什么 | 不做什么 |
+|---|---|---|
+| `launcher_console.py` | 跑 DDNS 监控循环、写日志、网络自愈 | 不画界面 |
+| `launcher_gui.py` | 编辑配置、校验、写 `config.json`、查看运行状态 | 不跑监控、不碰 DNS |
 
----
+**同时运行时的约定**
+
+- 图形界面只写配置文件，从不直接操作 DNS
+- 终端在每轮等待里以 0.15 秒为粒度检查配置文件指纹，发现变化就重新校验并应用
+- 校验不通过时保留旧配置继续运行，同时在终端日志里逐条打印字段级原因；图形界面下次刷新也能看到「热更新失败」
+- 配置写入走「临时文件 + `os.replace`」，终端不会读到写了一半的 JSON
+- 同一时间只允许一个监控进程（全局互斥体），避免两个实例互相覆盖记录
+
+| 检测页 | 状态页 |
+|---|---|
+| ![检测](docs/screenshot-detection.png) | ![状态](docs/screenshot-status.png) |
 
 ## 快速开始
 
-### 方式一：下载 exe（推荐，免安装 Python）
-
-1. 打开 [Releases](https://github.com/Mark136880/DDNS-Watchdog/releases/latest)，下载 `DDNS-Watchdog.exe`
-2. 放到一个固定目录（例如 `D:\DDNS\`）
-3. **右键以管理员身份运行**（自愈里的 `ipconfig /renew` 需要足够权限）
-4. 首次运行进入配置向导，按提示填写认证信息和域名
-5. 配置完成后按提示选择是否立即启动监控
-
-### 方式二：运行源码
+### 直接运行源码
 
 需要 Python 3.8 及以上，无第三方依赖。
 
 ```powershell
-python ddns_client.py
+python launcher_gui.py        # 打开图形配置，填好并保存
+python launcher_console.py    # 启动监控
 ```
 
-### 方式三：自己打包 exe
+### 使用打包好的 exe
 
-```powershell
-pip install pyinstaller
-pyinstaller --onefile --console --clean --noconfirm --name DDNS-Watchdog ddns_client.py
-```
+从 [Releases](https://github.com/Mark136880/DDNS-Watchdog/releases) 下载：
 
-产物在 `dist\DDNS-Watchdog.exe`。
+- `DDNS-Watchdog-Gui.exe`：图形配置
+- `DDNS-Watchdog-Console.exe`：终端监控
 
----
+放到同一个目录下（配置、状态、日志都读写 exe 所在目录），先开图形界面配置，再启动终端监控。**建议右键以管理员身份运行终端监控**，自愈里的 `ipconfig /renew` 才有权限。
 
-## 首次配置向导
+## 配置
 
-第一次运行会依次询问：
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `provider` | `tencent` | `tencent` 用 SecretId/SecretKey；`dnspod` 用 `ID,Token` |
+| `domain` | — | 主域名，如 `example.com` |
+| `sub_domain` | `@` | 主机名，`@` 表示根域名 |
+| `check_interval_seconds` | `300` | 正常时每 5 分钟检查一次（10~86400） |
+| `max_interval_seconds` | `1800` | 失败退避的最大间隔，不能小于检查间隔 |
+| `heal_after_failures` | `1` | 连续多少轮全部检测源失败后触发自愈 |
+| `auto_renew_adapter` | `true` | 自愈时是否 release/renew，会短暂断网几秒 |
+| `stun_servers` | 腾讯 / 小米 / Cloudflare | UDP 3478，基本不受本机 DNS 故障影响 |
+| `http_sources` | 7 个 | HTTP 备用检测源，按历史成功率动态排序 |
+| `revision` | 自动 | 每次保存 +1，终端用它确认拿到了新配置 |
 
-1. **认证方式**
-   - `[1]` 腾讯云 API 密钥：在 [API 密钥管理](https://console.cloud.tencent.com/cam/capi) 创建，并授予 DNSPod 记录读写权限
-   - `[2]` DNSPod API 令牌：在 [DNSPod Token](https://console.dnspod.cn/account/token/token) 创建，格式为 `ID,Token`
-2. **主域名**：例如 `example.com`
-3. **DDNS 主机名**：直接回车使用 `@`（即根域名本身）；填 `ddns` 则维护 `ddns.example.com`
-4. **检查间隔**（秒，默认 300）
+配置读写出 [`ddns_core/config.py`](ddns_core/config.py) 负责：先校验再落盘，非法值不会被写入。
 
-配置保存在程序同目录的 `config.json`。已有配置时直接回车即可保留原值。
+## 运行中操作
 
-也可以先复制示例再手工编辑：
-
-```powershell
-Copy-Item config.example.json config.json
-```
-
-> 密钥在向导中输入时会以掩码显示，但最终是以明文存放在 `config.json` 中，请妥善保管该文件，不要提交到仓库或发送给别人。
-
-随时重新进入向导（修改密钥、域名、间隔）：
-
-```powershell
-python ddns_client.py --setup
-```
-
----
-
-## 运行中修改配置
-
-监控运行中按 `Q`（`S` 同样有效）：
+终端监控里按 `Q`（`S` 同样有效）暂停并进入菜单：
 
 ```text
-[1] 重新配置密钥/域名
+[1] 配置向导（改密钥 / 域名）
 [2] 修改检查间隔
 [3] 立即执行一次检查
-[4] 返回监控
+[4] 重新加载配置文件
+[5] 显示运行状态
 [0] 退出程序
 ```
 
-停止运行：按 `Q` 后选 `0`，或直接 `Ctrl+C`。
+命令行参数：
 
----
+```powershell
+python launcher_console.py --setup     # 强制进入配置向导
+python launcher_console.py --check     # 只检查一次就退出
+python launcher_console.py --version
+python launcher_gui.py --version
+```
+
+## 热更新是怎么生效的
+
+```text
+图形界面保存
+  └─ 校验 → revision+1 → 原子写入 config.json
+        └─ 终端在等待间隙发现文件指纹变化
+              ├─ 校验通过 → 重建检测源、更新间隔/阈值/目标，立刻按新配置跑一轮
+              └─ 校验失败 → 打印字段级原因，继续用旧配置，心跳里记录失败原因
+```
+
+几个细节：
+
+- 换了域名或主机名，终端会清掉 `state.json` 里缓存的 IP，强制下一轮写入新目标
+- 只改间隔不会打断正在进行的检查，下一轮生效
+- 图形界面保存后如果终端没在运行，会提示「下次启动生效」
+
+## 异常与提示
+
+程序把失败分成「配置问题」和「运行问题」两类，分别给出可操作的提示：
+
+| 场景 | 表现 |
+|---|---|
+| 配置字段非法 | 图形界面标红对应输入框 + 顶部横幅 + 自动切到出错的页面；终端打印 `字段：原因（建议）` |
+| `config.json` 不是合法 JSON | 报出错误的行号列号；终端继续用旧配置，图形界面提供「原文件备份为 `config.invalid.json`」 |
+| 没有写权限 | 提示换到可写目录或用管理员身份运行 |
+| 配置文件被占用 | 写锁 5 秒超时后提示稍后重试 |
+| 认证失败 | 打印腾讯云/DNSPod 的具体错误码，并给出排查步骤 |
+| 所有检测源失败 | 记录失败轮数，达到阈值触发自愈，随后指数退避 |
+| 已有监控在运行 | 第二个实例直接退出并提示，不会抢记录 |
 
 ## 开机自启
 
 以管理员打开 PowerShell，把路径换成实际位置：
 
 ```powershell
-schtasks /Create /TN "DDNS-Watchdog" /TR "D:\DDNS\DDNS-Watchdog.exe" /SC ONSTART /RU SYSTEM /RL HIGHEST /F
+schtasks /Create /TN "DDNS-Watchdog" /TR "D:\DDNS\DDNS-Watchdog-Console.exe" /SC ONSTART /RU SYSTEM /RL HIGHEST /F
 ```
 
-使用 SYSTEM 账户后，开机即启动、无需登录，网卡重连也有权限。任务计划环境下建议设置 `DDNS_WATCHDOG_NOPAUSE=1`，避免程序在无人值守时停在「按回车退出」。
+任务计划环境建议同时设置环境变量 `DDNS_WATCHDOG_NOPAUSE=1`，避免出错退出时卡在「按回车」。
 
 取消自启：
 
@@ -127,97 +140,54 @@ schtasks /Create /TN "DDNS-Watchdog" /TR "D:\DDNS\DDNS-Watchdog.exe" /SC ONSTART
 schtasks /Delete /TN "DDNS-Watchdog" /F
 ```
 
----
-
-## 配置说明
-
-`config.json` 首次运行自动生成，也可以从 [`config.example.json`](config.example.json) 复制。
-
-| 字段 | 默认 | 说明 |
-|---|---|---|
-| `provider` | `tencent` | `tencent` 使用 SecretId/SecretKey；`dnspod` 使用 `ID,Token` |
-| `secret_id` / `secret_key` | 空 | 腾讯云 API 密钥（`provider=tencent` 时必填） |
-| `login_token` | 空 | DNSPod API 令牌，格式 `ID,Token`（`provider=dnspod` 时必填） |
-| `domain` | — | 主域名，如 `example.com` |
-| `sub_domain` | `@` | 主机名，`@` 表示根域名 |
-| `check_interval_seconds` | `300` | 正常时每 5 分钟检查一次 |
-| `max_interval_seconds` | `1800` | 失败后退避的最长间隔 |
-| `heal_after_failures` | `1` | 连续多少轮全部检测源失败后触发网卡重连 |
-| `auto_renew_adapter` | `true` | 自愈时是否执行 release/renew。会短暂断网数秒，不想自动断网就改为 `false` |
-| `stun_servers` | 腾讯 / 小米 / Cloudflare | UDP 3478，基本不受本机 DNS 故障影响 |
-| `http_sources` | 7 个 | HTTP 备用检测源，按历史成功率动态排序 |
-
-### 环境变量
+## 环境变量
 
 | 变量 | 作用 |
 |---|---|
-| `DDNS_WATCHDOG_DRYRUN=1` | 走完检测流程，但绝不修改 DNS。在另一台机器上试用时务必打开，避免和正在运行的实例互相改同一条记录 |
-| `DDNS_WATCHDOG_NOPAUSE=1` | 出错退出时不等待回车，适合任务计划等无人值守场景 |
+| `DDNS_WATCHDOG_DRYRUN=1` | 走完整检测流程但不修改 DNS。在另一台机器上试用时务必打开，避免和正在运行的实例互相改同一条记录 |
+| `DDNS_WATCHDOG_NOPAUSE=1` | 出错退出时不等待回车 |
 
----
-
-## 工作流程
-
-```text
-每轮检查
-  ├─ STUN 取公网 IP；失败则按成功率尝试 HTTP 源
-  ├─ 取不到 IP
-  │    └─ 累计失败达到 heal_after_failures
-  │         └─ flushdns + ipconfig /release /renew，然后拉长重试间隔
-  ├─ IP 与上次相同 → 核对云端记录，漂移则改回
-  └─ IP 变化 → 第二个源确认 → 创建或修改 A 记录 → 写入 state.json
-```
-
-日志写在 `logs\ddns.log`，同时输出到控制台。`state.json` 只记录上次成功写进去的 IP，避免每次都调用修改接口。
-
----
-
-## 常见问题
-
-**日志里反复出现「检测到 DNS 记录漂移」？**
-
-最可能是有**第二个实例**在别处运行（另一台电脑、或残留进程）在同时维护同一条记录，两边互相改。先确认是不是只有一台机器在跑：
+## 自己打包
 
 ```powershell
-tasklist | findstr /i "DDNS-Watchdog"
+pip install pyinstaller
+
+pyinstaller --onefile --console --clean --noconfirm `
+    --name DDNS-Watchdog-Console launcher_console.py
+
+pyinstaller --onefile --windowed --clean --noconfirm `
+    --name DDNS-Watchdog-Gui launcher_gui.py
 ```
 
-同一域名下的 A 记录只应该由一个实例维护。
+产物在 `dist\`。
 
-**认证失败怎么办？**
+## 目录结构
 
-程序会打印排查提示。确认认证方式与凭据类型匹配：腾讯云要用 API 密钥（SecretId/SecretKey），DNSPod 要用 API 令牌（`ID,Token`，ID 在前）。改完运行 `DDNS-Watchdog.exe --setup`。
+```text
+ddns_core/          核心：配置、检测、API、自愈、监控循环、运行时心跳
+ui/                 图形界面：主题、自绘控件、四个页面、主窗口
+launcher_console.py 终端启动器
+launcher_gui.py     图形配置启动器
+ddns_client.py      v1 兼容入口（自动转调终端启动器）
+tests/              离线测试与界面冒烟脚本
+docs/               界面截图
+```
 
-**自愈会把我网络弄断吗？**
+## 测试
 
-`auto_renew_adapter` 为 `true` 时，检测源全失败会主动断开并重连网卡，期间断网数秒。不想自动断网，把它改成 `false`。
+```powershell
+python -m unittest tests.test_config   # 24 项：校验、原子写、热更新
+python tests/smoke_gui.py              # 构建界面并渲染一帧后自动关闭
+python tests/smoke_save.py             # 保存链路（写入临时目录）
+```
 
-**IP 没变会不会一直调 API？**
-
-IP 未变化时只做一次记录核对查询，不会调用修改接口。
-
-**只想先试试，不想动线上记录？**
-
-先设 `DDNS_WATCHDOG_DRYRUN=1` 再运行，走完检测流程但绝不写 DNS。
-
----
+这些测试都不联网，也不会修改真实 DNS 记录。
 
 ## 注意
 
-- 同一条解析记录只应该有一个实例在维护。两台电脑同时运行会互相覆盖记录。
-- `auto_renew_adapter` 为 `true` 时，检测源全失败会主动断开并重连网卡。
-- 不要把填好密钥的 `config.json` 提交到仓库或发给别人。
-- 建议以管理员身份运行，否则自愈里的 `ipconfig /renew` 可能失败。
-
-## 文件
-
-| 文件 | 说明 |
-|---|---|
-| `ddns_client.py` | 程序源码 |
-| `config.example.json` | 配置模板，不含密钥 |
-| `config.json` | 本机配置，首次运行生成，已在 `.gitignore` 中排除 |
-| `state.json` | 上次 IP，自动生成 |
-| `logs/ddns.log` | 运行日志 |
+- 同一条解析记录只应该有一个监控实例；第二个实例会被互斥体挡住
+- `auto_renew_adapter` 为 `true` 时，检测源全失败会主动断开并重连网卡
+- 不要把填好密钥的 `config.json` 提交到仓库或发给别人
 
 ## 许可
 
