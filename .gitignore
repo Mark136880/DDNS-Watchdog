@@ -15,4 +15,5 @@ __pycache__/
 *.pyc
 .venv/
 .workbuddy/
+.codebuddy/
 DDNS-Watchdog-分析报告.md
