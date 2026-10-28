@@ -124,11 +124,14 @@ class TextField(tk.Frame):
 
         head = tk.Frame(self, bg=bg)
         head.pack(fill="x")
+        self._head = head
         tk.Label(head, text=label, bg=bg, fg=theme.MUTED, font=theme.FONT_LABEL,
                  anchor="w").pack(side="left")
+        self._hint_label = None
         if hint:
-            tk.Label(head, text=hint, bg=bg, fg=theme.FAINT, font=theme.FONT_LABEL,
-                     anchor="e").pack(side="right")
+            self._hint_label = tk.Label(head, text=hint, bg=bg, fg=theme.FAINT,
+                                        font=theme.FONT_LABEL, anchor="e")
+            self._hint_label.pack(side="right")
 
         height = theme.px(38)
         self.canvas = tk.Canvas(self, bg=bg, height=height, highlightthickness=0, bd=0)
@@ -235,6 +238,14 @@ class TextField(tk.Frame):
         self.var.set(value or "")
         if self._error:
             self.clear_error()
+
+    def set_hint(self, text, color=theme.ACCENT):
+        """动态更新右上角的辅助文字（例如把当前完整域名显示出来）。"""
+        if self._hint_label is None:
+            self._hint_label = tk.Label(self._head, bg=self.bg, fg=color,
+                                        font=theme.FONT_LABEL, anchor="e")
+            self._hint_label.pack(side="right")
+        self._hint_label.configure(text=text, fg=color)
 
     def show_error(self, message):
         self._error = message
@@ -752,17 +763,17 @@ class Banner(tk.Canvas):
         fill, accent = palette.get(self._kind, palette["info"])
         font = tkfont.Font(font=theme.FONT_SMALL)
         # 粗略按字符宽度换行，避免提示条过高
-        per_line = max(20, int((width - theme.px(48)) / max(1, font.measure("测"))))
+        per_line = max(20, int((width - theme.px(40)) / max(1, font.measure("测"))))
         text = self._message
         lines = [text[i:i + per_line] for i in range(0, len(text), per_line)] or [""]
-        height = theme.px(20) + len(lines) * theme.px(18)
+        height = theme.px(14) + len(lines) * theme.px(16)
         self.configure(height=height)
         self.delete("all")
-        round_rect(self, 0, 0, width, height, theme.px(10), fill=fill, outline="")
-        round_rect(self, 0, theme.px(8), theme.px(3), height - theme.px(8),
+        round_rect(self, 0, 0, width, height, theme.px(8), fill=fill, outline="")
+        round_rect(self, 0, theme.px(6), theme.px(3), height - theme.px(6),
                    theme.px(2), fill=accent, outline="")
         for index, line in enumerate(lines):
-            self.create_text(theme.px(16), theme.px(12) + index * theme.px(18),
+            self.create_text(theme.px(14), theme.px(8) + index * theme.px(16),
                              text=line, anchor="nw", fill=accent, font=theme.FONT_SMALL)
 
 

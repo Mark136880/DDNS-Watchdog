@@ -21,11 +21,11 @@ class Page(widgets.ScrollFrame):
         self.app = app
         self.fields = {}
         self.content = tk.Frame(self.inner, bg=theme.BG)
-        self.content.pack(fill="x", padx=theme.px(20), pady=(theme.px(4), theme.px(16)))
+        self.content.pack(fill="x", padx=theme.px(20), pady=(theme.px(2), theme.px(12)))
         self.build()
 
-    def card(self, pady=(0, theme.px(10))):
-        card = widgets.Card(self.content, pad=theme.px(16), parent_bg=theme.BG)
+    def card(self, pady=(0, theme.px(8))):
+        card = widgets.Card(self.content, pad=theme.px(14), parent_bg=theme.BG)
         card.pack(fill="x", pady=pady)
         return card
 
@@ -74,13 +74,13 @@ class ConnectionPage(Page):
         self.provider = widgets.SegmentedControl(
             body, [("tencent", "腾讯云 API 密钥"), ("dnspod", "DNSPod 令牌")],
             value="tencent", command=self._on_provider, width=theme.px(360))
-        self.provider.pack(anchor="w", pady=(theme.px(10), theme.px(12)))
+        self.provider.pack(anchor="w", pady=(theme.px(8), theme.px(10)))
 
         self.tencent_group = tk.Frame(body, bg=theme.SURFACE)
         self.secret_id = widgets.TextField(
             self.tencent_group, "SecretId", hint="AKID 开头",
             placeholder="AKIDxxxxxxxxxxxxxxxx")
-        self.secret_id.pack(fill="x", pady=(0, theme.px(10)))
+        self.secret_id.pack(fill="x", pady=(0, theme.px(8)))
         self.secret_key = widgets.TextField(
             self.tencent_group, "SecretKey", secret=True, hint="与 SecretId 成对")
         self.secret_key.pack(fill="x")
@@ -101,27 +101,23 @@ class ConnectionPage(Page):
         body = card.body
         widgets.SectionTitle(body, "解析目标", "记录不存在会自动创建，只影响这一条记录").pack(fill="x")
         row = tk.Frame(body, bg=theme.SURFACE)
-        row.pack(fill="x", pady=(theme.px(10), 0))
+        row.pack(fill="x", pady=(theme.px(8), 0))
         row.grid_columnconfigure(0, weight=3)
         row.grid_columnconfigure(1, weight=2)
 
-        self.domain = widgets.TextField(row, "主域名", hint="不带 http://")
-        self.domain.grid(row=0, column=0, sticky="ew", padx=(0, theme.px(14)))
-        self.sub_domain = widgets.TextField(row, "主机名", hint="@ 表示根域")
+        self.domain = widgets.TextField(row, "主域名")
+        self.domain.grid(row=0, column=0, sticky="ew", padx=(0, theme.px(12)))
+        self.sub_domain = widgets.TextField(row, "主机名（@ 为根域）")
         self.sub_domain.grid(row=0, column=1, sticky="ew")
         self.fields["domain"] = self.domain
         self.fields["sub_domain"] = self.sub_domain
-
-        self.target_label = tk.Label(body, text="", bg=theme.SURFACE, fg=theme.ACCENT,
-                                     font=theme.FONT_SMALL, anchor="w")
-        self.target_label.pack(fill="x", pady=(theme.px(8), 0))
 
         self.domain.var.trace_add("write", lambda *_: self._refresh_target())
         self.sub_domain.var.trace_add("write", lambda *_: self._refresh_target())
 
         # 测试连接：并进同一张卡片，少一张卡、少一段留白
         tk.Frame(body, bg=theme.BORDER, height=1).pack(fill="x",
-                                                       pady=(theme.px(14), theme.px(12)))
+                                                       pady=(theme.px(10), theme.px(10)))
         line = tk.Frame(body, bg=theme.SURFACE)
         line.pack(fill="x")
         self.test_btn = widgets.RoundedButton(line, "测试连接", command=self._test,
@@ -143,10 +139,11 @@ class ConnectionPage(Page):
         self.app.mark_dirty()
 
     def _refresh_target(self):
-        domain = self.domain.get() or "example.com"
-        sub = self.sub_domain.get() or "@"
-        self.target_label.configure(
-            text="最终解析：%s" % (domain if sub == "@" else "%s.%s" % (sub, domain)))
+        domain = self.domain.get().strip() or "example.com"
+        sub = (self.sub_domain.get().strip() or "@").lower()
+        full = domain if sub == "@" else "%s.%s" % (sub, domain)
+        # 直接显示在主机名输入框右上角，省掉一整行「最终解析」
+        self.sub_domain.set_hint("→ " + full)
 
     def load(self, cfg):
         self.provider.set(cfg.get("provider", "tencent"), animate=False)
@@ -294,6 +291,9 @@ class ListEditor(tk.Frame):
         self.error.configure(text="")
 
 
+SOURCE_HINT = "每行一个地址，按从上到下的顺序尝试"
+
+
 class DetectionPage(Page):
     key = "detection"
     title = "检测"
@@ -335,28 +335,89 @@ class DetectionPage(Page):
         note.pack(fill="x", pady=(theme.px(8), 0))
         widgets.wrap_to(body, note)
 
-        card = self.card()
-        body = card.body
-        widgets.SectionTitle(
-            body, "STUN 检测源",
-            "UDP 直连，不依赖 HTTP 与 DNS 解析，弱网下最可靠；按顺序尝试").pack(fill="x")
-        self.stun = ListEditor(body, placeholder="stun.qq.com:3478", bg=theme.SURFACE,
-                               defaults=config_mod.DEFAULT_STUN_SERVERS)
-        self.stun.pack(fill="x", pady=(theme.px(10), 0))
-        self.stun.on_change = lambda: self.app.mark_dirty()
-        self.fields["stun_servers"] = self.stun
-
+        # 检测源：STUN 与 HTTP 共用一块文本域，分段切换。
+        # 七行 HTTP 源如果用逐行输入框，卡片会被撑到一屏放不下。
         card = self.card(pady=(0, 0))
         body = card.body
-        widgets.SectionTitle(
-            body, "HTTP 备用源",
-            "STUN 全部失败时才会用到；建议保留纯 IPv4 接口").pack(fill="x")
-        self.http_sources = ListEditor(body, placeholder="https://4.ipw.cn",
-                                       bg=theme.SURFACE,
-                                       defaults=config_mod.DEFAULT_HTTP_SOURCES)
-        self.http_sources.pack(fill="x", pady=(theme.px(10), 0))
-        self.http_sources.on_change = lambda: self.app.mark_dirty()
-        self.fields["http_sources"] = self.http_sources
+        widgets.SectionTitle(body, "检测源",
+                             "STUN 优先，全部失败才用 HTTP；每行一个地址").pack(fill="x")
+        head = tk.Frame(body, bg=theme.SURFACE)
+        head.pack(fill="x", pady=(theme.px(8), 0))
+        self.source_tabs = widgets.SegmentedControl(
+            head, [("stun", "STUN 检测源"), ("http", "HTTP 备用源")],
+            value="stun", command=self._switch_sources, width=theme.px(250))
+        self.source_tabs.pack(side="left")
+        self.source_hint = tk.Label(head, text="", bg=theme.SURFACE, fg=theme.FAINT,
+                                    font=theme.FONT_SMALL, anchor="e")
+        self.source_hint.pack(side="right")
+
+        holder = tk.Frame(body, bg=theme.FIELD_BG, highlightthickness=1,
+                          highlightbackground=theme.BORDER, highlightcolor=theme.ACCENT)
+        holder.pack(fill="x", pady=(theme.px(10), 0))
+        self.source_text = tk.Text(
+            holder, height=5, bd=0, relief="flat", bg=theme.FIELD_BG, fg=theme.TEXT,
+            font=theme.FONT_MONO, insertbackground=theme.ACCENT, wrap="none",
+            padx=theme.px(10), pady=theme.px(8), highlightthickness=0)
+        self.source_text.pack(fill="x")
+        self.source_text.bind("<KeyRelease>", lambda e: self.app.mark_dirty())
+        self.source_text.bind("<FocusIn>", lambda e: holder.configure(
+            highlightbackground=theme.ACCENT))
+        self.source_text.bind("<FocusOut>", lambda e: holder.configure(
+            highlightbackground=theme.BORDER))
+
+        foot = tk.Frame(body, bg=theme.SURFACE)
+        foot.pack(fill="x", pady=(theme.px(8), 0))
+        widgets.RoundedButton(foot, "恢复默认", command=self._reset_sources,
+                              kind="ghost", width=theme.px(86),
+                              height=theme.px(30)).pack(side="left")
+        self.source_error = tk.Label(foot, text=SOURCE_HINT, bg=theme.SURFACE,
+                                     fg=theme.FAINT, font=theme.FONT_SMALL,
+                                     anchor="w", justify="left")
+        self.source_error.pack(side="left", padx=(theme.px(10), 0))
+
+        self._sources = {"stun": list(config_mod.DEFAULT_STUN_SERVERS),
+                         "http": list(config_mod.DEFAULT_HTTP_SOURCES)}
+        self._active = "stun"
+        self.fields["stun_servers"] = self
+        self.fields["http_sources"] = self
+
+    # -- 检测源切换 -------------------------------------------------------
+    def _switch_sources(self, key):
+        self._commit_sources()
+        self._active = key
+        self._load_source_text()
+        self._sync_hint()
+        self.app.mark_dirty()
+
+    def _sync_hint(self):
+        self.source_hint.configure(
+            text="UDP 直连，按顺序尝试" if self._active == "stun"
+            else "STUN 全失败时才用，建议保留纯 IPv4 接口")
+
+    def _commit_sources(self):
+        text = self.source_text.get("1.0", "end")
+        self._sources[self._active] = [line.strip() for line in text.splitlines()
+                                       if line.strip()]
+
+    def _load_source_text(self):
+        self.source_text.delete("1.0", "end")
+        self.source_text.insert("1.0", "\n".join(self._sources[self._active]))
+
+    def _reset_sources(self):
+        defaults = (config_mod.DEFAULT_STUN_SERVERS if self._active == "stun"
+                    else config_mod.DEFAULT_HTTP_SOURCES)
+        self._sources[self._active] = list(defaults)
+        self._load_source_text()
+        self.clear_error()
+        self.app.mark_dirty()
+
+    def show_error(self, message):
+        current = str(self.source_error.cget("text"))
+        text = message if current == SOURCE_HINT else "%s；%s" % (current, message)
+        self.source_error.configure(text=text, fg=theme.DANGER)
+
+    def clear_error(self):
+        self.source_error.configure(text=SOURCE_HINT, fg=theme.FAINT)
 
     def _use_preset(self, value):
         self.interval.set(value)
@@ -367,8 +428,13 @@ class DetectionPage(Page):
     def load(self, cfg):
         self.interval.set(str(cfg.get("check_interval_seconds", 300)))
         self.max_interval.set(str(cfg.get("max_interval_seconds", 1800)))
-        self.stun.set(cfg.get("stun_servers") or [])
-        self.http_sources.set(cfg.get("http_sources") or [])
+        self._sources = {"stun": list(cfg.get("stun_servers") or []),
+                         "http": list(cfg.get("http_sources") or [])}
+        self._active = "stun"
+        self.source_tabs.set("stun", animate=False)
+        self._load_source_text()
+        self._sync_hint()
+        self.clear_error()
         current = self.interval.get()
         for chip_value, chip in self.chips:
             chip.set_selected(chip_value == current)
@@ -376,8 +442,9 @@ class DetectionPage(Page):
     def collect(self, draft):
         draft["check_interval_seconds"] = self.interval.get()
         draft["max_interval_seconds"] = self.max_interval.get()
-        draft["stun_servers"] = self.stun.get()
-        draft["http_sources"] = self.http_sources.get()
+        self._commit_sources()
+        draft["stun_servers"] = self._sources["stun"]
+        draft["http_sources"] = self._sources["http"]
 
 
 # ---------------------------------------------------------------------------
@@ -474,8 +541,7 @@ class StatusPage(Page):
     def build(self):
         card = self.card()
         body = card.body
-        widgets.SectionTitle(body, "运行状态",
-                             "状态来自终端监控进程写入的心跳文件").pack(fill="x")
+        widgets.SectionTitle(body, "运行状态").pack(fill="x")
         head = tk.Frame(body, bg=theme.SURFACE)
         head.pack(fill="x", pady=(theme.px(16), 0))
         self.pill = widgets.StatusPill(head, bg=theme.SURFACE)
@@ -494,11 +560,11 @@ class StatusPage(Page):
                 ("revision", "配置版本"), ("config_error", "热更新")]):
             tk.Label(grid, text=label, bg=theme.SURFACE, fg=theme.FAINT,
                      font=theme.FONT_SMALL, anchor="w", width=8).grid(
-                row=index, column=0, sticky="w", pady=theme.px(3))
+                row=index, column=0, sticky="w", pady=theme.px(2))
             value = tk.Label(grid, text="—", bg=theme.SURFACE, fg=theme.TEXT,
                              font=theme.FONT_SMALL, anchor="w", justify="left",
                              wraplength=theme.px(430))
-            value.grid(row=index, column=1, sticky="w", pady=theme.px(3))
+            value.grid(row=index, column=1, sticky="w", pady=theme.px(2))
             self.rows[key] = value
 
         actions = tk.Frame(body, bg=theme.SURFACE)
@@ -516,8 +582,8 @@ class StatusPage(Page):
 
         card = self.card(pady=(0, 0))
         body = card.body
-        widgets.SectionTitle(body, "最近日志", "logs/ddns.log 末尾 8 行").pack(fill="x")
-        self.log_box = tk.Text(body, height=8, bd=0, relief="flat", bg=theme.FIELD_BG,
+        widgets.SectionTitle(body, "最近日志").pack(fill="x")
+        self.log_box = tk.Text(body, height=4, bd=0, relief="flat", bg=theme.FIELD_BG,
                                fg=theme.MUTED, font=theme.FONT_MONO, wrap="none",
                                padx=theme.px(12), pady=theme.px(10),
                                highlightthickness=1, highlightbackground=theme.BORDER)
@@ -560,7 +626,7 @@ class StatusPage(Page):
             if data.get("dryrun"):
                 self.detail.configure(text=self.detail.cget("text") + " · DRYRUN 测试模式")
 
-        lines = logging_setup.tail_lines(8)
+        lines = logging_setup.tail_lines(4)
         self.log_box.configure(state="normal")
         self.log_box.delete("1.0", "end")
         self.log_box.insert("1.0", "\n".join(lines) if lines else "（暂无日志）")

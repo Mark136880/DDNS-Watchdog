@@ -24,6 +24,8 @@ class App(object):
         self.field_index = {}
         self.current_index = -1
         self._backed_up = False
+        # 首次运行不占用顶部横幅，改在页脚提示，省下一整行高度
+        self.first_run = not config_mod.exists(self.cfg_path)
 
         self._setup_window()
         self._build_sidebar()
@@ -38,6 +40,9 @@ class App(object):
 
     # -- 启动 -------------------------------------------------------------
     def _load_initial(self):
+        # 文件不存在是首次运行，不算错误，不要走红色横幅
+        if not config_mod.exists(self.cfg_path):
+            return dict(config_mod.DEFAULT_CONFIG)
         try:
             return config_mod.load(self.cfg_path)
         except config_mod.ConfigError as e:
@@ -61,7 +66,7 @@ class App(object):
         screen_w = self.root.winfo_screenwidth()
         screen_h = self.root.winfo_screenheight()
         width = min(theme.px(950), int(screen_w * 0.92))
-        height = min(theme.px(650), int(screen_h * 0.88))
+        height = min(theme.px(700), int(screen_h * 0.88))
         self.root.geometry("%dx%d" % (width, height))
         self.root.minsize(min(theme.px(830), int(screen_w * 0.76)),
                           min(theme.px(560), int(screen_h * 0.68)))
@@ -159,8 +164,6 @@ class App(object):
         if self.load_error is not None:
             self.banner.show("配置文件有问题：%s  已按默认值载入，保存后会覆盖原文件。"
                              % self.load_error, "error")
-        elif not os.path.exists(self.cfg_path):
-            self.banner.show("还没有配置文件，填好下面的信息并保存即可开始。", "info")
 
     # -- 页面切换 ---------------------------------------------------------
     def show_page(self, index, animate=True):
@@ -233,8 +236,13 @@ class App(object):
     def _sync_title(self):
         suffix = " *" if self.dirty else ""
         self.root.title("%s 配置 v%s%s" % (APP_NAME, VERSION, suffix))
-        self.footer_hint.configure(
-            text="有未保存的修改 · Ctrl+S 保存" if self.dirty else "Ctrl+S 保存")
+        if self.dirty:
+            text = "有未保存的修改 · Ctrl+S 保存"
+        elif self.first_run:
+            text = "还没有配置文件，填好后点「保存配置」即可开始"
+        else:
+            text = "Ctrl+S 保存"
+        self.footer_hint.configure(text=text)
 
     # -- 保存 -------------------------------------------------------------
     def save(self):
@@ -282,6 +290,7 @@ class App(object):
         self._busy = False
         self.cfg = saved
         self.load_error = None
+        self.first_run = False
         self.dirty = False
         self._sync_title()
         self.banner.hide()
