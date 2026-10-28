@@ -8,7 +8,7 @@
 """
 
 APP_NAME = "DDNS-Watchdog"
-VERSION = "2.0.0"
+VERSION = "2.0.1"
 UA = "%s/%s" % (APP_NAME, VERSION)
 
 # 退出码：便于脚本/任务计划区分失败原因

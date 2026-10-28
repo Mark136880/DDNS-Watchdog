@@ -10,16 +10,25 @@ import tkinter.font as tkfont
 from . import theme
 
 
-def round_rect(canvas, x1, y1, x2, y2, radius, **kwargs):
-    """用平滑多边形近似圆角矩形。"""
+def round_rect_points(x1, y1, x2, y2, radius):
     radius = max(0, min(radius, int((x2 - x1) / 2), int((y2 - y1) / 2)))
-    points = [
+    return [
         x1 + radius, y1, x2 - radius, y1, x2, y1,
         x2, y1 + radius, x2, y2 - radius, x2, y2,
         x2 - radius, y2, x1 + radius, y2, x1, y2,
         x1, y2 - radius, x1, y1 + radius, x1, y1,
     ]
-    return canvas.create_polygon(points, smooth=True, splinesteps=24, **kwargs)
+
+
+def round_rect(canvas, x1, y1, x2, y2, radius, **kwargs):
+    """用平滑多边形近似圆角矩形。"""
+    return canvas.create_polygon(round_rect_points(x1, y1, x2, y2, radius),
+                                 smooth=True, splinesteps=24, **kwargs)
+
+
+def reshape(canvas, item, x1, y1, x2, y2, radius):
+    """只更新已有圆角矩形的坐标，不重建元素（动画时不闪、开销更小）。"""
+    canvas.coords(item, *round_rect_points(x1, y1, x2, y2, radius))
 
 
 # ---------------------------------------------------------------------------
@@ -29,7 +38,7 @@ def round_rect(canvas, x1, y1, x2, y2, radius, **kwargs):
 class Card(tk.Canvas):
     """白色圆角卡片，内容放进 self.body。"""
 
-    def __init__(self, master, pad=22, radius=14, fill=theme.SURFACE,
+    def __init__(self, master, pad=16, radius=12, fill=theme.SURFACE,
                  parent_bg=theme.BG, border=theme.BORDER):
         tk.Canvas.__init__(self, master, bg=parent_bg, highlightthickness=0, bd=0)
         self.pad = pad
@@ -121,9 +130,9 @@ class TextField(tk.Frame):
             tk.Label(head, text=hint, bg=bg, fg=theme.FAINT, font=theme.FONT_LABEL,
                      anchor="e").pack(side="right")
 
-        height = theme.px(42)
+        height = theme.px(38)
         self.canvas = tk.Canvas(self, bg=bg, height=height, highlightthickness=0, bd=0)
-        self.canvas.pack(fill="x", pady=(6, 0))
+        self.canvas.pack(fill="x", pady=(5, 0))
 
         self.var = tk.StringVar(value=value)
         self.entry = tk.Entry(
@@ -155,7 +164,7 @@ class TextField(tk.Frame):
                                     font=theme.FONT_SMALL, anchor="w", justify="left")
         self._error_visible = False
         self._border = theme.BORDER
-        self._border_ratio = 0.0
+        self._frame_id = None
         self.canvas.after(10, self._paint)
 
     # -- 布局与绘制 -------------------------------------------------------
@@ -169,7 +178,7 @@ class TextField(tk.Frame):
                                self.canvas.winfo_height() // 2)
         self._paint()
 
-    def _paint(self, _ratio=None):
+    def _paint(self, color=None):
         if not self.canvas.winfo_exists():
             return
         width = self.canvas.winfo_width()
@@ -177,10 +186,15 @@ class TextField(tk.Frame):
         if width < 4:
             # 还没被布局到屏幕上；<Configure> 触发后会重画，这里不轮询
             return
-        self.canvas.delete("frame")
-        round_rect(self.canvas, 1, 1, width - 1, height - 1, theme.px(9),
-                   fill=theme.FIELD_BG, outline=self._border, width=1, tags="frame")
-        self.canvas.tag_lower("frame")
+        outline = color or self._border
+        if self._frame_id is None:
+            self._frame_id = round_rect(
+                self.canvas, 1, 1, width - 1, height - 1, theme.px(9),
+                fill=theme.FIELD_BG, outline=outline, width=1)
+            self.canvas.tag_lower(self._frame_id)
+        else:
+            reshape(self.canvas, self._frame_id, 1, 1, width - 1, height - 1, theme.px(9))
+            self.canvas.itemconfigure(self._frame_id, outline=outline)
 
     def _animate_border(self, target, ratio_from=0.0):
         start = self._border
@@ -188,16 +202,10 @@ class TextField(tk.Frame):
         def step(t):
             color = theme.mix(start, target, t)
             self._border = color
-            width = self.canvas.winfo_width()
-            height = self.canvas.winfo_height()
-            if width < 4:
-                return
-            self.canvas.delete("frame")
-            round_rect(self.canvas, 1, 1, width - 1, height - 1, theme.px(9),
-                       fill=theme.FIELD_BG, outline=color, width=1, tags="frame")
-            self.canvas.tag_lower("frame")
+            self._paint(color)
 
-        theme.tween(self.canvas, 140, step)
+        # 焦点切换用短时长 + 强缓出，视觉上「一下就位但不生硬」
+        theme.tween(self.canvas, 160, step)
 
     def _on_focus_in(self, _event=None):
         self._focused = True
@@ -252,14 +260,7 @@ class TextField(tk.Frame):
             if index >= len(frames) or not self.canvas.winfo_exists():
                 self._animate_border(theme.DANGER)
                 return
-            color = frames[index]
-            width = self.canvas.winfo_width()
-            height = self.canvas.winfo_height()
-            if width > 4:
-                self.canvas.delete("frame")
-                round_rect(self.canvas, 1, 1, width - 1, height - 1, theme.px(9),
-                           fill=theme.FIELD_BG, outline=color, width=1, tags="frame")
-                self.canvas.tag_lower("frame")
+            self._paint(frames[index])
             self.canvas.after(110, lambda: step(index + 1))
 
         step()
@@ -269,29 +270,38 @@ class Toggle(tk.Canvas):
     """带滑块动画的开关。"""
 
     def __init__(self, master, value=True, command=None, bg=theme.SURFACE):
-        self.width = theme.px(46)
-        self.height = theme.px(26)
+        self.width = theme.px(38)
+        self.height = theme.px(22)
         tk.Canvas.__init__(self, master, width=self.width, height=self.height,
                            bg=bg, highlightthickness=0, bd=0, cursor="hand2")
         self.command = command
         self.value = bool(value)
         self._pos = 1.0 if self.value else 0.0
+        self._track = None
+        self._thumb = None
         self.bind("<Button-1>", self._click)
         self.after(10, self._paint)
 
     def _paint(self):
         if not self.winfo_exists():
             return
-        self.delete("all")
-        track = theme.mix(theme.BORDER_HOVER, theme.ACCENT, self._pos)
-        round_rect(self, 1, 1, self.width - 1, self.height - 1,
-                   (self.height - 2) // 2, fill=track, outline="")
-        radius = (self.height - theme.px(8)) // 2
-        center_x = theme.px(4) + radius + self._pos * (self.width - theme.px(8) - 2 * radius)
-        center_y = self.height // 2
-        self.create_oval(center_x - radius, center_y - radius,
-                         center_x + radius, center_y + radius,
-                         fill=theme.SURFACE, outline="")
+        if self._track is None:
+            self._track = round_rect(self, 1, 1, self.width - 1, self.height - 1,
+                                     (self.height - 2) // 2,
+                                     fill=theme.BORDER_HOVER, outline="")
+            pad = theme.px(4)
+            self._thumb_pad = pad
+            radius = (self.height - pad * 2) // 2
+            self._thumb_radius = radius
+            self._thumb = self.create_oval(0, 0, 0, 0, fill=theme.SURFACE, outline="")
+        self.itemconfigure(self._track, fill=theme.mix(theme.BORDER_HOVER, theme.ACCENT,
+                                                      self._pos))
+        radius = self._thumb_radius
+        pad = self._thumb_pad
+        center_x = pad + radius + self._pos * (self.width - pad * 2 - 2 * radius)
+        center_y = self.height / 2
+        self.coords(self._thumb, center_x - radius, center_y - radius,
+                    center_x + radius, center_y + radius)
 
     def _click(self, _event=None):
         self.set(not self.value, animate=True)
@@ -311,7 +321,8 @@ class Toggle(tk.Canvas):
             self._pos = start + (target - start) * t
             self._paint()
 
-        theme.tween(self, 180, step)
+        # 小元素给一点回弹，手指拨动的感觉
+        theme.tween(self, 220, step, easing=lambda t: theme.ease_out_back(t, 1.12))
 
 
 class SegmentedControl(tk.Canvas):
@@ -319,7 +330,7 @@ class SegmentedControl(tk.Canvas):
 
     def __init__(self, master, options, value=None, command=None,
                  bg=theme.SURFACE, width=theme.px(300)):
-        self.height = theme.px(40)
+        self.height = theme.px(36)
         tk.Canvas.__init__(self, master, height=self.height, width=width,
                            bg=bg, highlightthickness=0, bd=0, cursor="hand2")
         self.options = list(options)
@@ -327,6 +338,9 @@ class SegmentedControl(tk.Canvas):
         self.command = command
         self._index = self._index_of(self.value)
         self._pos = float(self._index)
+        self._track = None
+        self._pill = None
+        self._labels = []
         self.bind("<Button-1>", self._click)
         self.bind("<Configure>", lambda e: self._paint())
         self.after(10, self._paint)
@@ -347,19 +361,28 @@ class SegmentedControl(tk.Canvas):
         height = self.height
         if width < 10:
             return
-        self.delete("all")
-        round_rect(self, 0, 0, width, height, theme.px(10),
-                   fill=theme.FIELD_BG, outline=theme.BORDER, width=1)
+        if self._track is None:
+            self._track = round_rect(self, 0, 0, width, height, theme.px(9),
+                                     fill=theme.FIELD_BG, outline=theme.BORDER, width=1)
+            self._pill = round_rect(self, 0, 0, 1, 1, theme.px(7),
+                                    fill=theme.SURFACE, outline=theme.BORDER, width=1)
+            self._labels = [
+                self.create_text(0, height / 2, text=label, fill=theme.MUTED,
+                                 font=theme.FONT_BODY)
+                for _key, label in self.options
+            ]
+        else:
+            reshape(self, self._track, 0, 0, width, height, theme.px(9))
+
         seg_w = self._segment_width()
         pill_x = theme.px(3) + self._pos * seg_w
-        round_rect(self, pill_x + 2, theme.px(3), pill_x + seg_w - 2, height - theme.px(3),
-                   theme.px(8), fill=theme.SURFACE, outline=theme.BORDER, width=1)
-        for index, (_key, label) in enumerate(self.options):
+        reshape(self, self._pill, pill_x + 2, theme.px(3), pill_x + seg_w - 2,
+                height - theme.px(3), theme.px(7))
+        for index, item in enumerate(self._labels):
             center_x = theme.px(3) + seg_w * index + seg_w / 2
             active = abs(self._pos - index) < 0.5
-            self.create_text(center_x, height / 2, text=label,
-                             fill=theme.TEXT if active else theme.MUTED,
-                             font=theme.FONT_BUTTON if active else theme.FONT_BODY)
+            self.coords(item, center_x, height / 2)
+            self.itemconfigure(item, fill=theme.TEXT if active else theme.MUTED)
 
     def _click(self, event):
         seg_w = self._segment_width()
@@ -420,12 +443,14 @@ class RoundedButton(tk.Canvas):
         self._hover_ratio = 0.0
         font = font or theme.FONT_BUTTON
         measure = tkfont.Font(font=font)
-        width = width or (measure.measure(text) + theme.px(38))
-        height = height or theme.px(36)
+        width = width or (measure.measure(text) + theme.px(34))
+        height = height or theme.px(34)
         self._cw, self._ch = width, height
         tk.Canvas.__init__(self, master, width=width, height=height, bg=bg,
                            highlightthickness=0, bd=0, cursor="hand2")
         self._font = font
+        self._bg = None
+        self._label = None
         self.bind("<Enter>", self._on_enter)
         self.bind("<Leave>", self._on_leave)
         self.bind("<Button-1>", self._on_press)
@@ -435,16 +460,20 @@ class RoundedButton(tk.Canvas):
     def _paint(self):
         if not self.winfo_exists():
             return
-        self.delete("all")
         fill = theme.mix(self.base, self.hover, self._hover_ratio)
         outline = theme.mix(self.border, self.hover, self._hover_ratio) if self.border else ""
         if not self._enabled:
             fill = theme.mix(self.base, theme.BORDER, 0.55)
             outline = theme.BORDER
-        round_rect(self, 1, 1, self._cw - 1, self._ch - 1, theme.px(9),
-                   fill=fill, outline=outline, width=1)
         fg = self.fg if self._enabled else theme.FAINT
-        self.create_text(self._cw / 2, self._ch / 2, text=self.text, fill=fg, font=self._font)
+        if self._bg is None:
+            self._bg = round_rect(self, 1, 1, self._cw - 1, self._ch - 1, theme.px(8),
+                                  fill=fill, outline=outline, width=1)
+            self._label = self.create_text(self._cw / 2, self._ch / 2, text=self.text,
+                                           fill=fg, font=self._font)
+        else:
+            self.itemconfigure(self._bg, fill=fill, outline=outline)
+            self.itemconfigure(self._label, text=self.text, fill=fg)
 
     def _on_enter(self, _event=None):
         if not self._enabled or self._loading:
@@ -455,7 +484,8 @@ class RoundedButton(tk.Canvas):
             self._hover_ratio = start + (1 - start) * t
             self._paint()
 
-        theme.tween(self, 130, step)
+        # 悬停用很短的时长，跟手；离开稍长，避免边缘抖动
+        theme.tween(self, 120, step)
 
     def _on_leave(self, _event=None):
         start = self._hover_ratio
@@ -464,7 +494,7 @@ class RoundedButton(tk.Canvas):
             self._hover_ratio = start * (1 - t)
             self._paint()
 
-        theme.tween(self, 160, step)
+        theme.tween(self, 180, step)
 
     def _on_press(self, _event=None):
         if not self._enabled or self._loading:
@@ -514,8 +544,8 @@ class Chip(tk.Canvas):
                  selected=False, color=theme.ACCENT):
         font = theme.FONT_SMALL
         measure = tkfont.Font(font=font)
-        self._cw = measure.measure(text) + theme.px(22)
-        self._ch = theme.px(26)
+        self._cw = measure.measure(text) + theme.px(18)
+        self._ch = theme.px(24)
         tk.Canvas.__init__(self, master, width=self._cw, height=self._ch, bg=bg,
                            highlightthickness=0, bd=0, cursor="hand2")
         self.text = text
@@ -523,6 +553,8 @@ class Chip(tk.Canvas):
         self.selected = selected
         self.color = color
         self._ratio = 1.0 if selected else 0.0
+        self._bg = None
+        self._label = None
         self.bind("<Button-1>", lambda e: self.command and self.command(text))
         self.bind("<Enter>", lambda e: self._hover(True))
         self.bind("<Leave>", lambda e: self._hover(False))
@@ -540,14 +572,17 @@ class Chip(tk.Canvas):
     def _paint(self):
         if not self.winfo_exists():
             return
-        self.delete("all")
         fill = theme.mix(theme.SURFACE, theme.ACCENT_SOFT, self._ratio)
         outline = theme.mix(theme.BORDER, self.color, self._ratio)
-        round_rect(self, 1, 1, self._cw - 1, self._ch - 1, self._ch // 2,
-                   fill=fill, outline=outline, width=1)
-        self.create_text(self._cw / 2, self._ch / 2, text=self.text,
-                         fill=theme.mix(theme.MUTED, self.color, self._ratio),
-                         font=theme.FONT_SMALL)
+        fg = theme.mix(theme.MUTED, self.color, self._ratio)
+        if self._bg is None:
+            self._bg = round_rect(self, 1, 1, self._cw - 1, self._ch - 1,
+                                  self._ch // 2, fill=fill, outline=outline, width=1)
+            self._label = self.create_text(self._cw / 2, self._ch / 2, text=self.text,
+                                           fill=fg, font=theme.FONT_SMALL)
+        else:
+            self.itemconfigure(self._bg, fill=fill, outline=outline)
+            self.itemconfigure(self._label, fill=fg)
 
     def set_selected(self, selected):
         self.selected = selected
@@ -560,8 +595,8 @@ class NavItem(tk.Canvas):
     """侧栏导航项：图标 + 文字，激活时有滑块高亮。"""
 
     def __init__(self, master, icon, text, command=None):
-        self._cw = theme.px(184)
-        self._ch = theme.px(42)
+        self._cw = theme.px(168)
+        self._ch = theme.px(36)
         tk.Canvas.__init__(self, master, width=self._cw, height=self._ch,
                            bg=theme.SIDEBAR_BG, highlightthickness=0, bd=0,
                            cursor="hand2")
@@ -570,6 +605,8 @@ class NavItem(tk.Canvas):
         self.command = command
         self.active = False
         self._hover = 0.0
+        self._bg = None
+        self._bar = None
         self.bind("<Button-1>", lambda e: self.command and self.command())
         self.bind("<Enter>", lambda e: self._animate(1.0))
         self.bind("<Leave>", lambda e: self._animate(0.0))
@@ -582,7 +619,7 @@ class NavItem(tk.Canvas):
             self._hover = start + (target - start) * t
             self._paint()
 
-        theme.tween(self, 140, step)
+        theme.tween(self, 150, step)
 
     def set_active(self, active):
         self.active = bool(active)
@@ -591,22 +628,36 @@ class NavItem(tk.Canvas):
     def _paint(self):
         if not self.winfo_exists():
             return
-        self.delete("all")
+        if self._bg is None:
+            self._bg = round_rect(self, 1, 1, self._cw - 1, self._ch - 1,
+                                  theme.px(8), fill=theme.SIDEBAR_ACTIVE, outline="")
+            self._bar = round_rect(self, 0, 0, 0, 0, theme.px(2),
+                                   fill=theme.SIDEBAR_HINT, outline="")
+            self._icon = self.create_text(theme.px(18), self._ch / 2, text=self.icon,
+                                          fill=theme.SIDEBAR_TEXT,
+                                          font=(theme.FONT_FAMILY, 11))
+            self._label = self.create_text(theme.px(38), self._ch / 2, text=self.text,
+                                           anchor="w", fill=theme.SIDEBAR_TEXT,
+                                           font=theme.FONT_NAV)
+
         if self.active or self._hover > 0.01:
             fill = theme.SIDEBAR_ACTIVE if self.active else theme.mix(
                 theme.SIDEBAR_BG, theme.SIDEBAR_HOVER, self._hover)
-            round_rect(self, 1, 1, self._cw - 1, self._ch - 1, theme.px(9),
-                       fill=fill, outline="")
+            self.itemconfigure(self._bg, fill=fill, state="normal")
+        else:
+            self.itemconfigure(self._bg, state="hidden")
+
         if self.active:
-            round_rect(self, 0, self._ch / 2 - theme.px(9), theme.px(3),
-                       self._ch / 2 + theme.px(9), theme.px(2),
-                       fill=theme.SIDEBAR_HINT, outline="")
+            reshape(self, self._bar, 0, self._ch / 2 - theme.px(8), theme.px(3),
+                    self._ch / 2 + theme.px(8), theme.px(2))
+            self.itemconfigure(self._bar, state="normal")
+        else:
+            self.itemconfigure(self._bar, state="hidden")
+
         color = theme.SIDEBAR_TEXT_ACTIVE if self.active else theme.mix(
             theme.SIDEBAR_TEXT, theme.SIDEBAR_TEXT_ACTIVE, self._hover * 0.7)
-        self.create_text(theme.px(20), self._ch / 2, text=self.icon,
-                         fill=color, font=(theme.FONT_FAMILY, 11))
-        self.create_text(theme.px(42), self._ch / 2, text=self.text, anchor="w",
-                         fill=color, font=theme.FONT_NAV)
+        self.itemconfigure(self._icon, fill=color)
+        self.itemconfigure(self._label, fill=color)
 
 
 class ToastHost(object):
@@ -640,15 +691,15 @@ class ToastHost(object):
                            fill="#F9FAFB", font=font, width=width - theme.px(48))
 
         index = len(self.items)
-        target_y = self.root.winfo_height() - theme.px(24) - height - index * (height + 10)
-        canvas.place(relx=1.0, x=-theme.px(24), y=target_y + theme.px(16), anchor="ne")
+        target_y = self.root.winfo_height() - theme.px(20) - height - index * (height + 8)
+        canvas.place(relx=1.0, x=-theme.px(20), y=target_y + theme.px(24), anchor="ne")
         self.items.append(canvas)
 
         def slide(t):
-            canvas.place_configure(y=target_y + (1 - t) * theme.px(16))
-            canvas.place_configure(x=-theme.px(24))
+            # 从下方轻轻抬起，位移大一点但时长够长，看起来是「浮上来」而不是「弹出来」
+            canvas.place_configure(y=target_y + (1 - t) * theme.px(24))
 
-        theme.tween(canvas, 220, slide)
+        theme.tween(canvas, 300, slide)
         canvas.after(duration, lambda: self._dismiss(canvas))
 
     def _dismiss(self, canvas):

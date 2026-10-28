@@ -72,8 +72,8 @@ def setup(root):
     FONT_BODY = (FONT_FAMILY, 10)
     FONT_SMALL = (FONT_FAMILY, 9)
     FONT_LABEL = (FONT_FAMILY, 9)
-    FONT_TITLE = (FONT_FAMILY, 18, "bold")
-    FONT_H2 = (FONT_FAMILY, 12, "bold")
+    FONT_TITLE = (FONT_FAMILY, 16, "bold")
+    FONT_H2 = (FONT_FAMILY, 11, "bold")
     FONT_CARD_TITLE = (FONT_FAMILY, 11, "bold")
     FONT_NAV = (FONT_FAMILY, 10)
     FONT_BUTTON = (FONT_FAMILY, 10)
@@ -103,14 +103,44 @@ def ease_out_cubic(t):
     return 1 - pow(1 - t, 3)
 
 
+def ease_out_quart(t):
+    return 1 - pow(1 - t, 4)
+
+
+def ease_out_quint(t):
+    """收尾更长、起步更快，界面位移类动画用它最接近「自然减速」。"""
+    return 1 - pow(1 - t, 5)
+
+
+def ease_out_expo(t):
+    return 1.0 if t >= 1.0 else 1 - pow(2, -10 * t)
+
+
+def ease_out_back(t, overshoot=1.32):
+    """轻微回弹，只用在开关拇指这类小元素上，幅度大了会显得廉价。"""
+    return 1 + (overshoot + 1) * pow(t - 1, 3) + overshoot * pow(t - 1, 2)
+
+
 def ease_in_out(t):
     return 2 * t * t if t < 0.5 else 1 - pow(-2 * t + 2, 2) / 2
 
 
-class Tween(object):
-    """对某个 widget 跑一段 16ms 步进的动画。"""
+def ease_in_out_cubic(t):
+    if t < 0.5:
+        return 4 * t * t * t
+    return 1 - pow(-2 * t + 2, 3) / 2
 
-    def __init__(self, widget, duration_ms, on_frame, on_done=None, easing=ease_out_cubic):
+
+class Tween(object):
+    """对某个 widget 跑一段按帧推进的动画。
+
+    只负责算进度，具体改什么由 on_frame 决定；调用方应当只更新已有画布
+    元素的属性，不要每帧重建，否则会出现闪烁和掉帧。
+    """
+
+    FRAME_MS = 16
+
+    def __init__(self, widget, duration_ms, on_frame, on_done=None, easing=ease_out_quint):
         self.widget = widget
         self.duration = max(1, int(duration_ms))
         self.on_frame = on_frame
@@ -143,7 +173,7 @@ class Tween(object):
         except Exception:
             return
         if progress < 1.0:
-            self.widget.after(16, self._tick)
+            self.widget.after(self.FRAME_MS, self._tick)
         elif self.on_done is not None:
             try:
                 self.on_done()
@@ -151,7 +181,7 @@ class Tween(object):
                 pass
 
 
-def tween(widget, duration_ms, on_frame, on_done=None, easing=ease_out_cubic):
+def tween(widget, duration_ms, on_frame, on_done=None, easing=ease_out_quint):
     """同一控件上的新动画会取消上一个，避免 hover 抖动。"""
     previous = getattr(widget, "_theme_tween", None)
     if previous is not None:

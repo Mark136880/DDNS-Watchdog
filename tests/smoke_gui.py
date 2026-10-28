@@ -59,6 +59,8 @@ def _capture(root, path):
     except ImportError:
         print("NO_PIL")
         return
+    if not path.lower().endswith(".png"):
+        path += ".png"
     root.attributes("-topmost", True)
     root.lift()
     root.update()

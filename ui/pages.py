@@ -21,11 +21,11 @@ class Page(widgets.ScrollFrame):
         self.app = app
         self.fields = {}
         self.content = tk.Frame(self.inner, bg=theme.BG)
-        self.content.pack(fill="x", padx=theme.px(28), pady=(theme.px(6), theme.px(24)))
+        self.content.pack(fill="x", padx=theme.px(20), pady=(theme.px(4), theme.px(16)))
         self.build()
 
-    def card(self, pady=(0, theme.px(14))):
-        card = widgets.Card(self.content, pad=theme.px(22), parent_bg=theme.BG)
+    def card(self, pady=(0, theme.px(10))):
+        card = widgets.Card(self.content, pad=theme.px(16), parent_bg=theme.BG)
         card.pack(fill="x", pady=pady)
         return card
 
@@ -74,13 +74,13 @@ class ConnectionPage(Page):
         self.provider = widgets.SegmentedControl(
             body, [("tencent", "腾讯云 API 密钥"), ("dnspod", "DNSPod 令牌")],
             value="tencent", command=self._on_provider, width=theme.px(360))
-        self.provider.pack(anchor="w", pady=(theme.px(14), theme.px(16)))
+        self.provider.pack(anchor="w", pady=(theme.px(10), theme.px(12)))
 
         self.tencent_group = tk.Frame(body, bg=theme.SURFACE)
         self.secret_id = widgets.TextField(
             self.tencent_group, "SecretId", hint="AKID 开头",
             placeholder="AKIDxxxxxxxxxxxxxxxx")
-        self.secret_id.pack(fill="x", pady=(0, theme.px(14)))
+        self.secret_id.pack(fill="x", pady=(0, theme.px(10)))
         self.secret_key = widgets.TextField(
             self.tencent_group, "SecretKey", secret=True, hint="与 SecretId 成对")
         self.secret_key.pack(fill="x")
@@ -101,7 +101,7 @@ class ConnectionPage(Page):
         body = card.body
         widgets.SectionTitle(body, "解析目标", "记录不存在会自动创建，只影响这一条记录").pack(fill="x")
         row = tk.Frame(body, bg=theme.SURFACE)
-        row.pack(fill="x", pady=(theme.px(14), 0))
+        row.pack(fill="x", pady=(theme.px(10), 0))
         row.grid_columnconfigure(0, weight=3)
         row.grid_columnconfigure(1, weight=2)
 
@@ -114,25 +114,24 @@ class ConnectionPage(Page):
 
         self.target_label = tk.Label(body, text="", bg=theme.SURFACE, fg=theme.ACCENT,
                                      font=theme.FONT_SMALL, anchor="w")
-        self.target_label.pack(fill="x", pady=(theme.px(12), 0))
+        self.target_label.pack(fill="x", pady=(theme.px(8), 0))
 
         self.domain.var.trace_add("write", lambda *_: self._refresh_target())
         self.sub_domain.var.trace_add("write", lambda *_: self._refresh_target())
 
-        # 测试连接
-        card = self.card(pady=(0, 0))
-        body = card.body
-        widgets.SectionTitle(body, "连通性检查",
-                             "只读调用，不会修改任何解析记录").pack(fill="x")
+        # 测试连接：并进同一张卡片，少一张卡、少一段留白
+        tk.Frame(body, bg=theme.BORDER, height=1).pack(fill="x",
+                                                       pady=(theme.px(14), theme.px(12)))
         line = tk.Frame(body, bg=theme.SURFACE)
-        line.pack(fill="x", pady=(theme.px(12), 0))
+        line.pack(fill="x")
         self.test_btn = widgets.RoundedButton(line, "测试连接", command=self._test,
-                                              kind="ghost", width=theme.px(108))
+                                              kind="ghost", width=theme.px(100))
         self.test_btn.pack(side="left")
-        self.test_result = tk.Label(line, text="", bg=theme.SURFACE, fg=theme.MUTED,
+        self.test_result = tk.Label(line, text="只读检查，不会修改任何记录",
+                                    bg=theme.SURFACE, fg=theme.FAINT,
                                     font=theme.FONT_SMALL, anchor="w", justify="left",
-                                    wraplength=theme.px(420))
-        self.test_result.pack(side="left", padx=(theme.px(14), 0))
+                                    wraplength=theme.px(400))
+        self.test_result.pack(side="left", padx=(theme.px(12), 0))
 
     def _on_provider(self, value):
         if value == "tencent":
@@ -215,7 +214,7 @@ class ListEditor(tk.Frame):
         self.rows_box = tk.Frame(self, bg=bg)
         self.rows_box.pack(fill="x")
         footer = tk.Frame(self, bg=bg)
-        footer.pack(fill="x", pady=(theme.px(10), 0))
+        footer.pack(fill="x", pady=(theme.px(8), 0))
         self.add_btn = widgets.RoundedButton(footer, "+ 添加", command=self.add_row,
                                              kind="ghost", width=theme.px(84),
                                              height=theme.px(32), bg=bg)
@@ -231,7 +230,7 @@ class ListEditor(tk.Frame):
 
     def add_row(self, value=""):
         row = tk.Frame(self.rows_box, bg=self.bg)
-        row.pack(fill="x", pady=(0, theme.px(8)))
+        row.pack(fill="x", pady=(0, theme.px(6)))
         holder = tk.Frame(row, bg=theme.FIELD_BG, highlightthickness=1,
                           highlightbackground=theme.BORDER, highlightcolor=theme.ACCENT)
         holder.pack(side="left", fill="x", expand=True)
@@ -307,7 +306,7 @@ class DetectionPage(Page):
                              "IP 没变化时也要按这个间隔核对 DNS 记录").pack(fill="x")
 
         row = tk.Frame(body, bg=theme.SURFACE)
-        row.pack(fill="x", pady=(theme.px(14), 0))
+        row.pack(fill="x", pady=(theme.px(10), 0))
         row.grid_columnconfigure(0, weight=1)
         row.grid_columnconfigure(1, weight=1)
 
@@ -333,7 +332,7 @@ class DetectionPage(Page):
                                    "不能小于检查间隔。",
                         bg=theme.SURFACE, fg=theme.FAINT, font=theme.FONT_SMALL,
                         anchor="w", justify="left")
-        note.pack(fill="x", pady=(theme.px(10), 0))
+        note.pack(fill="x", pady=(theme.px(8), 0))
         widgets.wrap_to(body, note)
 
         card = self.card()
@@ -343,7 +342,7 @@ class DetectionPage(Page):
             "UDP 直连，不依赖 HTTP 与 DNS 解析，弱网下最可靠；按顺序尝试").pack(fill="x")
         self.stun = ListEditor(body, placeholder="stun.qq.com:3478", bg=theme.SURFACE,
                                defaults=config_mod.DEFAULT_STUN_SERVERS)
-        self.stun.pack(fill="x", pady=(theme.px(12), 0))
+        self.stun.pack(fill="x", pady=(theme.px(10), 0))
         self.stun.on_change = lambda: self.app.mark_dirty()
         self.fields["stun_servers"] = self.stun
 
@@ -355,7 +354,7 @@ class DetectionPage(Page):
         self.http_sources = ListEditor(body, placeholder="https://4.ipw.cn",
                                        bg=theme.SURFACE,
                                        defaults=config_mod.DEFAULT_HTTP_SOURCES)
-        self.http_sources.pack(fill="x", pady=(theme.px(12), 0))
+        self.http_sources.pack(fill="x", pady=(theme.px(10), 0))
         self.http_sources.on_change = lambda: self.app.mark_dirty()
         self.fields["http_sources"] = self.http_sources
 
@@ -398,13 +397,13 @@ class HealPage(Page):
             "连续多少轮全部检测源失败后执行自愈。设为 1 表示第一次失败就动手。").pack(fill="x")
 
         row = tk.Frame(body, bg=theme.SURFACE)
-        row.pack(fill="x", pady=(theme.px(14), 0))
+        row.pack(fill="x", pady=(theme.px(10), 0))
         self.heal_after = widgets.TextField(row, "连续失败轮数", hint="1 ~ 100")
         self.heal_after.pack(side="left", fill="x", expand=True)
         self.fields["heal_after_failures"] = self.heal_after
 
         chips = tk.Frame(body, bg=theme.SURFACE)
-        chips.pack(fill="x", pady=(theme.px(10), 0))
+        chips.pack(fill="x", pady=(theme.px(8), 0))
         tk.Label(chips, text="常用：", bg=theme.SURFACE, fg=theme.FAINT,
                  font=theme.FONT_SMALL).pack(side="left")
         self.chips = []
@@ -435,7 +434,7 @@ class HealPage(Page):
         self.fields["auto_renew_adapter"] = self.auto_renew
 
         tip = tk.Frame(body, bg=theme.WARNING_SOFT)
-        tip.pack(fill="x", pady=(theme.px(16), 0))
+        tip.pack(fill="x", pady=(theme.px(12), 0))
         tip_label = tk.Label(tip, text="关闭后只刷新 DNS 缓存，不会断开网卡；"
                                        "如果服务端要求重新拨号才能恢复公网 IP，请保持开启。",
                              bg=theme.WARNING_SOFT, fg=theme.WARNING,
@@ -487,7 +486,7 @@ class StatusPage(Page):
 
         self.rows = {}
         grid = tk.Frame(body, bg=theme.SURFACE)
-        grid.pack(fill="x", pady=(theme.px(16), 0))
+        grid.pack(fill="x", pady=(theme.px(12), 0))
         grid.grid_columnconfigure(1, weight=1)
         for index, (key, label) in enumerate([
                 ("target", "监控目标"), ("ip", "当前 IP"), ("source", "检测来源"),
@@ -495,15 +494,15 @@ class StatusPage(Page):
                 ("revision", "配置版本"), ("config_error", "热更新")]):
             tk.Label(grid, text=label, bg=theme.SURFACE, fg=theme.FAINT,
                      font=theme.FONT_SMALL, anchor="w", width=8).grid(
-                row=index, column=0, sticky="w", pady=theme.px(4))
+                row=index, column=0, sticky="w", pady=theme.px(3))
             value = tk.Label(grid, text="—", bg=theme.SURFACE, fg=theme.TEXT,
                              font=theme.FONT_SMALL, anchor="w", justify="left",
                              wraplength=theme.px(430))
-            value.grid(row=index, column=1, sticky="w", pady=theme.px(4))
+            value.grid(row=index, column=1, sticky="w", pady=theme.px(3))
             self.rows[key] = value
 
         actions = tk.Frame(body, bg=theme.SURFACE)
-        actions.pack(fill="x", pady=(theme.px(16), 0))
+        actions.pack(fill="x", pady=(theme.px(12), 0))
         self.check_btn = widgets.RoundedButton(actions, "立即检查一次",
                                                command=self._request_check,
                                                kind="soft", width=theme.px(124))
@@ -518,11 +517,11 @@ class StatusPage(Page):
         card = self.card(pady=(0, 0))
         body = card.body
         widgets.SectionTitle(body, "最近日志", "logs/ddns.log 末尾 8 行").pack(fill="x")
-        self.log_box = tk.Text(body, height=9, bd=0, relief="flat", bg=theme.FIELD_BG,
+        self.log_box = tk.Text(body, height=8, bd=0, relief="flat", bg=theme.FIELD_BG,
                                fg=theme.MUTED, font=theme.FONT_MONO, wrap="none",
                                padx=theme.px(12), pady=theme.px(10),
                                highlightthickness=1, highlightbackground=theme.BORDER)
-        self.log_box.pack(fill="x", pady=(theme.px(12), 0))
+        self.log_box.pack(fill="x", pady=(theme.px(10), 0))
         self.log_box.configure(state="disabled")
 
     def load(self, cfg):

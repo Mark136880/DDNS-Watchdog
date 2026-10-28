@@ -60,29 +60,29 @@ class App(object):
         # 高 DPI 下逻辑尺寸会换算成很大的物理像素，按屏幕可用区域收敛
         screen_w = self.root.winfo_screenwidth()
         screen_h = self.root.winfo_screenheight()
-        width = min(theme.px(1010), int(screen_w * 0.94))
-        height = min(theme.px(700), int(screen_h * 0.90))
+        width = min(theme.px(950), int(screen_w * 0.92))
+        height = min(theme.px(650), int(screen_h * 0.88))
         self.root.geometry("%dx%d" % (width, height))
-        self.root.minsize(min(theme.px(880), int(screen_w * 0.78)),
-                          min(theme.px(600), int(screen_h * 0.70)))
+        self.root.minsize(min(theme.px(830), int(screen_w * 0.76)),
+                          min(theme.px(560), int(screen_h * 0.68)))
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_columnconfigure(1, weight=1)
         self.toasts = widgets.ToastHost(self.root)
 
     def _build_sidebar(self):
-        bar = tk.Frame(self.root, bg=theme.SIDEBAR_BG, width=theme.px(224))
+        bar = tk.Frame(self.root, bg=theme.SIDEBAR_BG, width=theme.px(196))
         bar.grid(row=0, column=0, sticky="ns")
         bar.pack_propagate(False)
 
         brand = tk.Frame(bar, bg=theme.SIDEBAR_BG)
-        brand.pack(fill="x", padx=theme.px(18), pady=(theme.px(26), theme.px(28)))
-        logo = tk.Canvas(brand, width=theme.px(38), height=theme.px(38),
+        brand.pack(fill="x", padx=theme.px(14), pady=(theme.px(16), theme.px(16)))
+        logo = tk.Canvas(brand, width=theme.px(34), height=theme.px(34),
                          bg=theme.SIDEBAR_BG, highlightthickness=0, bd=0)
         logo.pack(side="left")
-        widgets.round_rect(logo, 0, 0, theme.px(38), theme.px(38), theme.px(10),
+        widgets.round_rect(logo, 0, 0, theme.px(34), theme.px(34), theme.px(9),
                            fill=theme.ACCENT, outline="")
-        logo.create_text(theme.px(19), theme.px(19), text="W", fill="#FFFFFF",
-                         font=(theme.FONT_FAMILY, 14, "bold"))
+        logo.create_text(theme.px(17), theme.px(17), text="W", fill="#FFFFFF",
+                         font=(theme.FONT_FAMILY, 13, "bold"))
         titles = tk.Frame(brand, bg=theme.SIDEBAR_BG)
         titles.pack(side="left", padx=(theme.px(10), 0))
         tk.Label(titles, text="DDNS-Watchdog", bg=theme.SIDEBAR_BG,
@@ -95,18 +95,18 @@ class App(object):
                                               ("＋", "自愈"), ("▤", "状态")]):
             item = widgets.NavItem(bar, icon, text,
                                    command=lambda i=index: self.show_page(i))
-            item.pack(padx=theme.px(14), pady=theme.px(3))
+            item.pack(padx=theme.px(12), pady=theme.px(2))
             self.nav_items.append(item)
 
         bottom = tk.Frame(bar, bg=theme.SIDEBAR_BG)
-        bottom.pack(side="bottom", fill="x", padx=theme.px(18), pady=theme.px(20))
+        bottom.pack(side="bottom", fill="x", padx=theme.px(14), pady=theme.px(14))
         self.side_hint = tk.Label(bottom, text="", bg=theme.SIDEBAR_BG,
                                   fg=theme.SIDEBAR_MUTED, font=theme.FONT_SMALL,
-                                  anchor="w", justify="left", wraplength=theme.px(180))
+                                  anchor="w", justify="left", wraplength=theme.px(160))
         self.side_hint.pack(fill="x")
         tk.Label(bottom, text="配置保存后终端自动热更新", bg=theme.SIDEBAR_BG,
                  fg=theme.SIDEBAR_MUTED, font=theme.FONT_SMALL, anchor="w",
-                 wraplength=theme.px(180)).pack(fill="x", pady=(theme.px(8), 0))
+                 wraplength=theme.px(160)).pack(fill="x", pady=(theme.px(6), 0))
 
     def _build_main(self):
         main = tk.Frame(self.root, bg=theme.BG)
@@ -115,38 +115,38 @@ class App(object):
         main.grid_columnconfigure(0, weight=1)
 
         header = tk.Frame(main, bg=theme.BG)
-        header.grid(row=0, column=0, sticky="ew", padx=theme.px(28),
-                    pady=(theme.px(24), theme.px(4)))
+        header.grid(row=0, column=0, sticky="ew", padx=theme.px(20),
+                    pady=(theme.px(16), theme.px(2)))
         header.grid_columnconfigure(0, weight=1)
         self.title_label = tk.Label(header, text="", bg=theme.BG, fg=theme.TEXT,
                                     font=theme.FONT_TITLE, anchor="w")
         self.title_label.grid(row=0, column=0, sticky="w")
         self.subtitle_label = tk.Label(header, text="", bg=theme.BG, fg=theme.MUTED,
                                        font=theme.FONT_SMALL, anchor="w")
-        self.subtitle_label.grid(row=1, column=0, sticky="w", pady=(theme.px(4), 0))
+        self.subtitle_label.grid(row=1, column=0, sticky="w", pady=(theme.px(2), 0))
         self.pill = widgets.StatusPill(header, bg=theme.BG)
         self.pill.grid(row=0, column=1, rowspan=2, sticky="e")
 
         self.banner = widgets.Banner(main, bg=theme.BG)
-        self.banner.grid(row=1, column=0, sticky="ew", padx=theme.px(28))
+        self.banner.grid(row=1, column=0, sticky="ew", padx=theme.px(20))
 
         self.container = tk.Frame(main, bg=theme.BG)
-        self.container.grid(row=2, column=0, sticky="nsew", pady=(theme.px(10), 0))
+        self.container.grid(row=2, column=0, sticky="nsew", pady=(theme.px(8), 0))
 
         footer = tk.Frame(main, bg=theme.BG)
-        footer.grid(row=3, column=0, sticky="ew", padx=theme.px(28),
-                    pady=(theme.px(6), theme.px(18)))
+        footer.grid(row=3, column=0, sticky="ew", padx=theme.px(20),
+                    pady=(theme.px(4), theme.px(12)))
         footer.grid_columnconfigure(0, weight=1)
         self.footer_hint = tk.Label(footer, text="", bg=theme.BG, fg=theme.FAINT,
                                     font=theme.FONT_SMALL, anchor="w")
         self.footer_hint.grid(row=0, column=0, sticky="w")
         self.reset_btn = widgets.RoundedButton(footer, "放弃修改", command=self.reload_config,
-                                               kind="ghost", width=theme.px(98),
-                                               height=theme.px(38), bg=theme.BG)
-        self.reset_btn.grid(row=0, column=1, padx=(0, theme.px(10)))
+                                               kind="ghost", width=theme.px(92),
+                                               height=theme.px(34), bg=theme.BG)
+        self.reset_btn.grid(row=0, column=1, padx=(0, theme.px(8)))
         self.save_btn = widgets.RoundedButton(footer, "保存配置", command=self.save,
-                                              kind="primary", width=theme.px(112),
-                                              height=theme.px(38), bg=theme.BG)
+                                              kind="primary", width=theme.px(104),
+                                              height=theme.px(34), bg=theme.BG)
         self.save_btn.grid(row=0, column=2)
 
     def _build_pages(self):
@@ -170,17 +170,27 @@ class App(object):
         if 0 <= self.current_index < len(self.pages):
             self.pages[self.current_index].place_forget()
         self.current_index = index
-        page.place(x=0, y=theme.px(10) if animate else 0, relwidth=1, relheight=1)
-        if animate:
-            start = theme.px(10)
-
-            def step(t):
-                page.place_configure(y=start * (1 - t))
-
-            theme.tween(page, 190, step)
+        offset = theme.px(14)
+        page.place(x=0, y=offset if animate else 0, relwidth=1, relheight=1)
 
         self.title_label.configure(text=page.title)
         self.subtitle_label.configure(text=page.subtitle)
+
+        if animate:
+            # 内容上浮：位移略大、时长拉长，收尾用强缓出，观感更「沉」
+            def rise(t):
+                page.place_configure(y=offset * (1 - t))
+
+            theme.tween(page, 260, rise)
+
+            # 标题同步淡入，避免整页像被硬切
+            def fade(t):
+                ratio = 0.2 + 0.8 * t
+                self.title_label.configure(fg=theme.mix(theme.BG, theme.TEXT, ratio))
+                self.subtitle_label.configure(fg=theme.mix(theme.BG, theme.MUTED, ratio))
+
+            theme.tween(self.title_label, 220, fade)
+
         for item_index, item in enumerate(self.nav_items):
             item.set_active(item_index == index)
         if page.key == "status":
